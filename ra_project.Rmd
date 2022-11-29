@@ -1,0 +1,300 @@
+---
+title: "Glucose"
+output: html_notebook
+---
+
+#Setup
+
+```{r}
+require(data.table)
+require(ggplot2)
+require(table1)
+require(readr)
+library(olsrr)
+library(faraway)
+library(caret)
+library(dplyr)
+library(Hmisc)
+```
+
+# data
+
+```{r}
+dt1 <- read.csv("glucose.csv")
+head(dt1)
+summary(dt1)
+```
+
+## Clean data
+
+```{r}
+dt1$Ins_Admin <- dt1$Insulin > 0
+dt1$Outcome <- NULL
+dt1 <- dt1[dt1$Glucose > 0 &
+             dt1$BMI > 0 & dt1$BloodPressure > 0, ]
+
+summary(dt1)
+hist(dt1$Glucose, 100)
+hist(log(dt1$Glucose), 100)
+hist(dt1$BMI, 100)
+hist(log(dt1$BMI), 100)
+
+```
+
+# Plot histogram
+
+```{r}
+hist.data.frame(dt1)
+```
+
+# Table 1
+
+```{r}
+table1(~. | Ins_Admin,
+       data = dt1, topclass="Rtable1-grid")
+
+```
+
+# Predictors of glucose
+
+## Insulin
+
+```{r}
+plot(dt1$Glucose ~ dt1$Insulin)
+plot(dt1$Glucose ~ log(dt1$Insulin))
+# plot(log(dt1$Glucose) ~ log(dt1$Insulin))
+
+dt1$sqrtInsulin <- sqrt(dt1$Insulin)
+
+summary(lm(Glucose ~ sqrtInsulin,
+           data = dt1))
+```
+## Blood pressure
+```{r}
+plot(dt1$Glucose ~ dt1$BloodPressure)
+plot(dt1$Glucose ~ log(dt1$BloodPressure))
+
+m1 <- loess(Glucose ~ BloodPressure,
+            data = dt1)
+dt1$bp_pred <- predict(m1)
+
+ggplot(dt1,
+       aes(x = BloodPressure,
+           y =  Glucose))+
+  geom_point() +
+  geom_line(aes(x = BloodPressure,
+                y = bp_pred)) +
+  theme_bw()
+
+dt1$bp_under_70 <- dt1$BloodPressure < 70
+
+summary(lm(Glucose ~ BloodPressure,
+           data = dt1))
+summary(lm(Glucose ~ bp_under_70,
+           data = dt1))
+```
+## Age
+```{r}
+# plot(dt1$Glucose ~ dt1$Age)
+# plot(dt1$Glucose ~ log(dt1$Age))
+# plot(log(dt1$Glucose) ~ dt1$Age)
+
+m2 <- loess(Glucose ~ Age,
+      data = dt1)
+
+dt1$gl_pred <- predict(m2)
+
+ggplot(dt1,
+       aes(x = Age,
+           y = Glucose)) +
+  geom_point() +
+  geom_line(aes(x = Age,
+                y = gl_pred)) +
+  theme_bw()
+
+dt1$age_under_30 <- dt1$Age < 30
+
+summary(lm(Glucose ~ Age,
+   data = dt1))
+summary(lm(Glucose ~ age_under_30,
+   data = dt1))
+```
+
+## DiabetsPedigreeFunction
+
+```{r}
+plot(dt1$Glucose ~ dt1$DiabetesPedigreeFunction)
+plot(dt1$Glucose ~ log(dt1$DiabetesPedigreeFunction))
+
+m3 <- loess(Glucose ~ DiabetesPedigreeFunction,
+            data = dt1)
+dt1$dpf_pred <- predict(m3)
+
+ggplot(dt1,
+       aes(x = DiabetesPedigreeFunction,
+           y =  Glucose))+
+  geom_point() +
+  geom_line(aes(x = DiabetesPedigreeFunction,
+                y = dpf_pred)) +
+  theme_bw()
+
+
+summary(lm(Glucose ~ DiabetesPedigreeFunction,
+           data = dt1))
+summary(lm(Glucose ~ log(DiabetesPedigreeFunction),
+           data = dt1))
+```
+
+## BMI
+
+```{r}
+plot(dt1$Glucose ~ dt1$BMI)
+plot(dt1$Glucose ~ log(dt1$BMI))
+plot(log(dt1$Glucose) ~ log(dt1$BMI))
+
+m4 <- loess(log(Glucose)~ log(BMI), data = dt1)
+ggplot(dt1,
+       aes(y = log(Glucose),
+           x = log(BMI))) + 
+  geom_point() + 
+  geom_line(aes(x = log(BMI),
+                y = predict(m4))) + 
+  theme_bw()
+  
+summary(m4)
+```
+
+## Pregnancies
+
+```{r}
+plot(dt1$Glucose ~ dt1$Pregnancies)
+plot(dt1$Glucose ~ log(dt1$Pregnancies))
+plot(log(dt1$Glucose) ~ log(dt1$Pregnancies))
+
+m5 <- loess(Glucose~Pregnancies, data = dt1)
+ggplot(dt1,
+       aes(y = Glucose,
+           x = Pregnancies)) + 
+  geom_point() + 
+  geom_line(aes(x = Pregnancies,
+                y = predict(m5))) + 
+  theme_bw()
+
+summary(m5)
+```
+## SkinThickness
+```{r}
+plot(dt1$Glucose ~ dt1$SkinThickness)
+plot(dt1$Glucose ~ log(dt1$SkinThickness))
+plot(log(dt1$Glucose) ~ log(dt1$SkinThickness))
+
+m6 <- lm(Glucose ~ SkinThickness,
+           data = dt1)
+summary(m6)
+```
+
+### Skin tikness of patients who are not diabetic wasn't mesured, so we will dropp this variable to avoid any incorrect results
+
+```{r}
+dt1$SkinThickness <- NULL
+```
+
+
+```{r}
+pairs(~ log(Glucose) + Pregnancies + BloodPressure + Insulin + BMI + 
+      DiabetesPedigreeFunction + Age,
+      data = dt1, panel = panel.smooth,
+      main = "Glucose data factors",
+      pch = 21,cex = 0.8,
+      bg = c("red", "green3", "blue")[unclass(iris$Species)])
+```
+
+# Linear Regression Model
+
+```{r}
+m0 <- lm(log(Glucose) ~ Pregnancies + BloodPressure +
+           Insulin + BMI + DiabetesPedigreeFunction + Age , data = dt1)
+summary(m0)
+```
+
+# To select variables that were significantly associated with the outcome (plasma glucose concentration) we will test stepwise forward,backward, by direction and best-subset procedures
+
+## All best subset selection
+
+```{r}
+k1 <- ols_step_best_subset(m0)
+k1
+```
+
+### Model 5 has higher Adj. R sq BloodPressure Insulin BMI DiabetesPedigreeFunction Age
+
+## Stepwise forward selection
+
+```{r}
+k2 <- ols_step_forward_p(m0, penter = 0.05)
+k2
+```
+
+## Stepwise backward selection
+
+```{r}
+k3 <- ols_step_backward_p(m0)
+k3$model
+```
+
+## By direction selection
+
+```{r}
+k4 <- ols_step_both_p(m0)
+k4$predictors
+```
+
+# Will perform a 5-fold Cross-Validation comparing model from foorward with model by direction
+## Step forward selected model
+```{r}
+lmod1 <- lm(Glucose ~ Insulin + Age +
+              BloodPressure +BMI +  DiabetesPedigreeFunction, dt1)
+
+set.seed(13245)
+train.control_1 <- trainControl(method = "cv", number = 5)
+model_1 <- train(Glucose ~ Insulin + Age +
+                   BloodPressure +BMI + DiabetesPedigreeFunction,
+                 data = dt1 ,method = "lm", trControl = train.control_1)
+print(model_1$results)
+summary(lmod1)
+```
+
+## By direction selected model
+```{r}
+lmod2 <- lm(Glucose ~ Insulin + Age + BloodPressure + BMI, data = dt1)
+
+set.seed(13245)
+train.control_2 <- trainControl(method = "cv", number = 5)
+model_2 <- train(Glucose ~ Insulin + Age
+                 + BloodPressure + BMI, data = dt1,
+                 method = "lm", trControl = train.control_2)
+print(model_2$results)
+summary(lmod2)
+
+```
+```{r}
+anova(model_1, model_2)
+```
+
+
+
+
+#lmod_1      RMSE      Rsquared   MAE
+#           24.45051  0.3917216  18.65624
+
+#model1      RSE      MRS      Adj_RS   MAE 
+#           24.49     0.3995   0.3917 
+
+
+
+#lmod_2      RMSE      Rsquared   MAE    
+#           24.45103  0.3912515  18.6361
+
+#model2    RSE      MRS      Adj_RS   MAE 
+#           24.54     0.394   0.3893
+```
