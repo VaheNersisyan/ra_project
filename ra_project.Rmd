@@ -1,73 +1,77 @@
 ---
-title: "Glucose"
-output: html_notebook
+title: "Constructing a Predictive Model for Plasma Glucose Concentration in Female Patients"
+output:
+  html_notebook:
+    highlight: tango
+    number_sections: yes
+    theme: united
+    toc: TRUE
+    toc_float: TRUE
+    df_print: paged
+    code_folding: hide
 ---
 
-#Setup
+# Author: Vahe Nersisyan    
+Date: `r date()`
 
+
+# Load libraries
 ```{r}
 require(data.table)
 require(ggplot2)
 require(table1)
 require(readr)
 library(olsrr)
-library(faraway)
 library(caret)
 library(dplyr)
+library(psych)
 library(Hmisc)
 ```
 
-# data
-
+# Data
 ```{r}
 dt1 <- read.csv("glucose.csv")
 head(dt1)
 summary(dt1)
 ```
-
 ## Clean data
-
 ```{r}
-dt1$Ins_Admin <- dt1$Insulin > 0
 dt1$Outcome <- NULL
 dt1 <- dt1[dt1$Glucose > 0 &
              dt1$BMI > 0 & dt1$BloodPressure > 0, ]
-
+dt1$SkinThickness <-  NULL
 summary(dt1)
-hist(dt1$Glucose, 100)
-hist(log(dt1$Glucose), 100)
-hist(dt1$BMI, 100)
-hist(log(dt1$BMI), 100)
-
 ```
-
-# Plot histogram
-
+## Plot data histogram
 ```{r}
 hist.data.frame(dt1)
 ```
 
-# Table 1
-
+## Scaterplot
 ```{r}
-table1(~. | Ins_Admin,
-       data = dt1, topclass="Rtable1-grid")
-
+pairs(Glucose ~ Pregnancies + BloodPressure + Insulin + BMI + 
+      DiabetesPedigreeFunction + Age,
+      data = dt1, panel = panel.smooth,
+      main = "Simple scaterplot ",
+      pch = 21,cex = 0.8,
+      bg = c("red", "green3", "blue")[unclass(iris$Species)])
 ```
 
 # Predictors of glucose
-
 ## Insulin
-
 ```{r}
+dt1$Ins_Admin <- dt1$Insulin > 0
 plot(dt1$Glucose ~ dt1$Insulin)
 plot(dt1$Glucose ~ log(dt1$Insulin))
-# plot(log(dt1$Glucose) ~ log(dt1$Insulin))
+plot(log(dt1$Glucose) ~ log(dt1$Insulin))
+plot(log(dt1$Glucose) ~ dt1$Insulin)
 
-dt1$sqrtInsulin <- sqrt(dt1$Insulin)
-
-summary(lm(Glucose ~ sqrtInsulin,
+summary(lm(Glucose ~ Insulin,
            data = dt1))
+
+dt1$Ins_Admin <- factor(dt1$Ins_Admin, levels = c(TRUE, FALSE), labels = c("Diabetic", "Non-Diabetic"))
+cor(dt1$Glucose, dt1$Insulin)
+
 ```
 ## Blood pressure
 ```{r}
@@ -93,35 +97,39 @@ summary(lm(Glucose ~ BloodPressure,
 summary(lm(Glucose ~ bp_under_70,
            data = dt1))
 ```
+
 ## Age
 ```{r}
-# plot(dt1$Glucose ~ dt1$Age)
-# plot(dt1$Glucose ~ log(dt1$Age))
-# plot(log(dt1$Glucose) ~ dt1$Age)
+plot(dt1$Glucose ~ dt1$Age)
+plot(dt1$Glucose ~ log(dt1$Age))
+plot(log(dt1$Glucose) ~ dt1$Age)
 
 m2 <- loess(Glucose ~ Age,
       data = dt1)
 
-dt1$gl_pred <- predict(m2)
+dt1$age_pred <- predict(m2)
 
 ggplot(dt1,
        aes(x = Age,
            y = Glucose)) +
   geom_point() +
   geom_line(aes(x = Age,
-                y = gl_pred)) +
+                y = age_pred)) +
   theme_bw()
 
-dt1$age_under_30 <- dt1$Age < 30
 
 summary(lm(Glucose ~ Age,
    data = dt1))
+dt1$age_under_30 <- dt1$Age < 30
 summary(lm(Glucose ~ age_under_30,
    data = dt1))
+
+dt1$age_under_30 <- factor(dt1$age_under_30, levels = c(TRUE, FALSE), labels = c("Under 30", "Over 30"))
+
+
 ```
 
 ## DiabetsPedigreeFunction
-
 ```{r}
 plot(dt1$Glucose ~ dt1$DiabetesPedigreeFunction)
 plot(dt1$Glucose ~ log(dt1$DiabetesPedigreeFunction))
@@ -146,7 +154,6 @@ summary(lm(Glucose ~ log(DiabetesPedigreeFunction),
 ```
 
 ## BMI
-
 ```{r}
 plot(dt1$Glucose ~ dt1$BMI)
 plot(dt1$Glucose ~ log(dt1$BMI))
@@ -165,7 +172,6 @@ summary(m4)
 ```
 
 ## Pregnancies
-
 ```{r}
 plot(dt1$Glucose ~ dt1$Pregnancies)
 plot(dt1$Glucose ~ log(dt1$Pregnancies))
@@ -182,119 +188,145 @@ ggplot(dt1,
 
 summary(m5)
 ```
-## SkinThickness
-```{r}
-plot(dt1$Glucose ~ dt1$SkinThickness)
-plot(dt1$Glucose ~ log(dt1$SkinThickness))
-plot(log(dt1$Glucose) ~ log(dt1$SkinThickness))
 
-m6 <- lm(Glucose ~ SkinThickness,
-           data = dt1)
-summary(m6)
+# Table 1
+```{r}
+# Age Table
+table1(~ Glucose + Pregnancies + BloodPressure +
+         Insulin + BMI + DiabetesPedigreeFunction| age_under_30,
+       data = dt1, topclass="Rtable1-grid")
+
+# Insulin Table
+table1(~ Glucose + Pregnancies + BloodPressure + BMI +  
+         DiabetesPedigreeFunction + Age | Ins_Admin, 
+       data = dt1, topclass="Rtable1-grid")
+
 ```
 
-### Skin tikness of patients who are not diabetic wasn't mesured, so we will dropp this variable to avoid any incorrect results
-
+# Full Linear Regression Model
 ```{r}
-dt1$SkinThickness <- NULL
+dt1$Glucose <- log(dt1$Glucose)
+lmod1 <- lm(Glucose ~ Pregnancies + BloodPressure +
+           Insulin + BMI + DiabetesPedigreeFunction +
+             Age , data = dt1)
+
+
+summary(lmod1)
+plot(lmod1)
+
 ```
 
-
-```{r}
-pairs(~ log(Glucose) + Pregnancies + BloodPressure + Insulin + BMI + 
-      DiabetesPedigreeFunction + Age,
-      data = dt1, panel = panel.smooth,
-      main = "Glucose data factors",
-      pch = 21,cex = 0.8,
-      bg = c("red", "green3", "blue")[unclass(iris$Species)])
-```
-
-# Linear Regression Model
-
-```{r}
-m0 <- lm(log(Glucose) ~ Pregnancies + BloodPressure +
-           Insulin + BMI + DiabetesPedigreeFunction + Age , data = dt1)
-summary(m0)
-```
-
-# To select variables that were significantly associated with the outcome (plasma glucose concentration) we will test stepwise forward,backward, by direction and best-subset procedures
+# Model selection
 
 ## All best subset selection
-
 ```{r}
-k1 <- ols_step_best_subset(m0)
-k1
+step_best <- ols_step_best_subset(lmod1)
+step_best
+plot(step_best)
 ```
 
-### Model 5 has higher Adj. R sq BloodPressure Insulin BMI DiabetesPedigreeFunction Age
+###Model 5 has higher Adj. R sq BloodPressure Insulin BMI DiabetesPedigreeFunction Age
 
 ## Stepwise forward selection
-
 ```{r}
-k2 <- ols_step_forward_p(m0, penter = 0.05)
-k2
+step_frw <- ols_step_forward_p(lmod1, penter = 0.05)
+step_frw
+plot(step_frw)
 ```
-
 ## Stepwise backward selection
-
 ```{r}
-k3 <- ols_step_backward_p(m0)
-k3$model
+step_bkw <- ols_step_backward_p(lmod1, prem = 0.05)
+step_bkw
+plot(step_bkw)
 ```
 
 ## By direction selection
-
 ```{r}
-k4 <- ols_step_both_p(m0)
-k4$predictors
+step_bydir <- ols_step_both_p(lmod1, pent = 0.05, prem = 0.05)
+step_bydir
+plot(step_bydir)
 ```
 
-# Will perform a 5-fold Cross-Validation comparing model from foorward with model by direction
-## Step forward selected model
+# 5 Fold Cross Validation
+##Performing 5-fold Cross-Validation comparing best subset selected model with step forward selecting model
+### Best subset selected model
 ```{r}
-lmod1 <- lm(Glucose ~ Insulin + Age +
-              BloodPressure +BMI +  DiabetesPedigreeFunction, dt1)
+model_best <- lm(Glucose ~ BloodPressure + Insulin +
+                   BMI + DiabetesPedigreeFunction + Age,
+                 data = dt1)
+
 
 set.seed(13245)
 train.control_1 <- trainControl(method = "cv", number = 5)
-model_1 <- train(Glucose ~ Insulin + Age +
-                   BloodPressure +BMI + DiabetesPedigreeFunction,
-                 data = dt1 ,method = "lm", trControl = train.control_1)
-print(model_1$results)
-summary(lmod1)
-```
+model_best_cross <- train(Glucose ~ BloodPressure + Insulin +
+                            BMI + DiabetesPedigreeFunction + Age,
+                          data = dt1, method = "lm",
+                          trControl = train.control_1)
 
-## By direction selected model
+print(model_best)
+summary(model_best_cross)
+```
+### Step forward selected model
 ```{r}
-lmod2 <- lm(Glucose ~ Insulin + Age + BloodPressure + BMI, data = dt1)
+model_fwd <- lm(Glucose ~ Insulin + Age +
+                  BloodPressure + BMI, data = dt1)
+
 
 set.seed(13245)
 train.control_2 <- trainControl(method = "cv", number = 5)
-model_2 <- train(Glucose ~ Insulin + Age
-                 + BloodPressure + BMI, data = dt1,
-                 method = "lm", trControl = train.control_2)
-print(model_2$results)
-summary(lmod2)
+model_fwd_cross <- train(Glucose ~ Insulin + Age
+                         + BloodPressure + BMI, data = dt1,
+                         method = "lm", trControl = train.control_2)
+
+print(model_fwd)
+summary(model_fwd_cross)
 
 ```
+### Using model_best_cross and model_fwd_cross to see if there are any difference in metrics for 5-fold cross validation with and without repeats
+
 ```{r}
-anova(model_1, model_2)
+train.control2 <- trainControl(method = "repeatedcv",
+                               number = 5,repeats=6)
+
+model_fwd_cross_2 <- train(Glucose ~ Insulin + Age + 
+                             BloodPressure + BMI, data = dt1, 
+                           method = "lm", trControl = train.control2)
+
+print(model_fwd_cross_2)
+
+
+train.control1 <- trainControl(method = "repeatedcv",
+                               number = 5,repeats=6)
+
+model_best_cross_2 <- train(Glucose ~ BloodPressure + Insulin + BMI +
+                              DiabetesPedigreeFunction + Age,
+                            data = dt1, method = "lm",
+                            trControl = train.control1)
+
+print(model_best_cross_2)
+
+```
+
+# Testing model
+```{r}
+ols_test_correlation(model_best)
+ols_test_normality(model_best)
+ols_plot_hadi(model_best)
+ols_plot_resid_box(model_best)
+ols_plot_diagnostics(model_best)
+```
+###The value shows that our predictors are normally distributed
+
+## Finding CI
+```{r}
+confint(lmod1)
+```
+
+# Test selected model
+```{r}
+ols_coll_diag(lmod1)
+ols_correlations(lmod1)
+ols_plot_diagnostics(lmod1)
 ```
 
 
-
-
-#lmod_1      RMSE      Rsquared   MAE
-#           24.45051  0.3917216  18.65624
-
-#model1      RSE      MRS      Adj_RS   MAE 
-#           24.49     0.3995   0.3917 
-
-
-
-#lmod_2      RMSE      Rsquared   MAE    
-#           24.45103  0.3912515  18.6361
-
-#model2    RSE      MRS      Adj_RS   MAE 
-#           24.54     0.394   0.3893
-```
